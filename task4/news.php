@@ -12,29 +12,121 @@ $text = <<<TXT
 </p>
 TXT;
 
-function trimWordsWithHtml($html, $wordCount) {
-    $words = preg_split('/(<[^>]+>|\s+)/u', $html, -1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE);
-    $result = '';
-    $wordCounter = 0;
-    foreach ($words as $word) {
-        if (preg_match('/^\s*$/u', $word)) {
-            $result .= $word;
-        } elseif (!preg_match('/^<[^>]+>$/u', $word)) {
-            $wordCounter++;
-            if ($wordCounter > $wordCount) {
-                break;
+// Разбиваем текст на слова, сохраняя HTML-теги как отдельные элементы
+$words = [];
+$currentWord = '';
+$insideTag = false;
+
+for ($i = 0; $i < strlen($text); $i++) {
+    $char = $text[$i];
+    
+    if ($char === '<') {
+        $insideTag = true;
+        if ($currentWord !== '') {
+            $words[] = $currentWord;
+            $currentWord = '';
+        }
+        $currentWord .= $char;
+    } elseif ($char === '>') {
+        $insideTag = false;
+        $currentWord .= $char;
+        $words[] = $currentWord;
+        $currentWord = '';
+    } elseif ($insideTag) {
+        $currentWord .= $char;
+    } else {
+        if (ctype_space($char) || $char === ' ') {
+            if ($currentWord !== '') {
+                $words[] = $currentWord;
+                $currentWord = '';
             }
-            $result .= $word;
+            $words[] = $char; // сохраняем пробелы и переносы
         } else {
-            $result .= $word; 
+            $currentWord .= $char;
         }
     }
-    if ($wordCounter > $wordCount) {
-        $result .= '...';
-    }
-
-    return $result;
 }
-$trimmedText = trimWordsWithHtml($text, 29);
-echo $trimmedText;
-?>
+
+if ($currentWord !== '') {
+    $words[] = $currentWord;
+}
+
+// Считаем только реальные слова (не теги и не пробелы)
+$realWordsCount = 0;
+$resultWords = [];
+$tagPatterns = ['<', '>', ' ', "\n", "\t", "\r"];
+
+foreach ($words as $word) {
+    $resultWords[] = $word;
+    
+    // Проверяем, является ли слово реальным словом (не тегом и не пробелом)
+    $isRealWord = true;
+    if (strpos($word, '<') === 0 || in_array($word, $tagPatterns)) {
+        $isRealWord = false;
+    }
+    
+    if ($isRealWord) {
+        $realWordsCount++;
+        if ($realWordsCount >= 29) {
+            // Добавляем многоточие перед закрывающими тегами
+            $lastTagPos = -1;
+            for ($i = count($resultWords) - 1; $i >= 0; $i--) {
+                if (strpos($resultWords[$i], '</') === 0) {
+                    $lastTagPos = $i;
+                    break;
+                }
+            }
+            
+            if ($lastTagPos !== -1) {
+                array_splice($resultWords, $lastTagPos, 0, '...');
+            } else {
+                $resultWords[] = '...';
+            }
+            break;
+        }
+    }
+}
+
+// Собираем результат
+$trimmedText = implode('', $resultWords);
+
+// Закрываем все незакрытые теги (простая реализация без полного парсинга)
+$openTags = [];
+$result = '';
+$i = 0;
+$len = strlen($trimmedText);
+
+while ($i < $len) {
+    if ($trimmedText[$i] === '<') {
+        $j = strpos($trimmedText, '>', $i);
+        if ($j === false) break;
+        
+        $tag = substr($trimmedText, $i, $j - $i + 1);
+        $result .= $tag;
+        
+        if ($tag[1] !== '/') {
+            // Открывающий тег
+            $spacePos = strpos($tag, ' ');
+            $tagName = ($spacePos !== false) 
+                ? substr($tag, 1, $spacePos - 1)
+                : substr($tag, 1, -1);
+            $openTags[] = $tagName;
+        } else {
+            // Закрывающий тег
+            array_pop($openTags);
+        }
+        
+        $i = $j + 1;
+    } else {
+        $result .= $trimmedText[$i];
+        $i++;
+    }
+}
+
+// Закрываем все оставшиеся теги в обратном порядке
+while (!empty($openTags)) {
+    $tag = array_pop($openTags);
+    $result .= "</$tag>";
+}
+
+echo $result;

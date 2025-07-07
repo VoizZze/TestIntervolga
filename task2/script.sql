@@ -9,3 +9,4 @@ WHERE `id` NOT IN (SELECT DISTINCT `product_id` FROM `availabilities`);
 -- Удаление складов без товаров
 DELETE FROM `stocks`
 WHERE `id` NOT IN (SELECT DISTINCT `stock_id` FROM `availabilities`);
+
